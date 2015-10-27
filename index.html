@@ -1,0 +1,23 @@
+<html>
+<head>
+    <title>Traffic Simulator</title>
+
+    <script type="text/javascript" src="traffic.js"></script>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+
+<body>
+    <h1>Javascript Traffic Simlulator</h1>
+    <div id="sim">
+        <div id="traffic_wrap">
+            <canvas id="traffic" height="500" width="500"></canvas>
+        </div>
+        <div id="controls">
+            <h2>How to use</h2>
+            <p>Press the buttons and watch the traffic move</p>
+            <button onclick="window.traffic.start()">Start</button>
+            <button onclick="window.traffic.stop()">Stop</button>
+        </div>
+    </div>
+</body>
+</html>

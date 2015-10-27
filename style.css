@@ -1,0 +1,13 @@
+body {
+    background: #AAA;
+}
+
+#sim {
+    display: flex;
+}
+#traffic {
+    background: #FFF;
+}
+#controls {
+    margin: auto;
+}
