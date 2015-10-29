@@ -3,6 +3,7 @@
     <title>Traffic Simulator</title>
 
     <script type="text/javascript" src="traffic.js"></script>
+    <script type="text/javascript" src="settings.js"></script>
     <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 
@@ -15,8 +16,11 @@
         <div id="controls">
             <h2>How to use</h2>
             <p>Press the buttons and watch the traffic move</p>
-            <button onclick="window.traffic.start()">Start</button>
-            <button onclick="window.traffic.stop()">Stop</button>
+            Town: <select id="s_town"></select>
+            Car AI: <select id="s_carai"></select>
+            Car #: <input type="number" id="s_carn"></select>
+            <button id="b_start">Start</button>
+            <button id="b_stop">Stop</button>
         </div>
     </div>
 </body>

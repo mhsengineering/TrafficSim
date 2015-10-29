@@ -13,7 +13,7 @@ window.traffic = (function () {
     ///////////////
     var CANVAS_HEIGHT = 500;
     var CANVAS_WIDTH  = 500;
-    var PHYSICS_CPS = 15;
+    var PHYSICS_CPS = 30;
 
     /////////////
     // Globals //
@@ -25,6 +25,15 @@ window.traffic = (function () {
     //////////////////////
     function getCurrentTime() {
         return (new Date()).getTime();
+    }
+    function getRandomArrayItem(arr) {
+        if (arr.length < 1) {
+            return null;
+        } else if (arr.length == 1) {
+            return arr[0];
+        }
+        var i = Math.floor(Math.random()*arr.length);
+        return arr[i];
     }
 
     /////////////
@@ -46,15 +55,75 @@ window.traffic = (function () {
     TrafficBuilder.prototype.stop = function () {
         this.timer.stop();
     }
+    TrafficBuilder.prototype.getSetup = function () {
+        var that = this;
+        return {
+            town: this.town,
+            sim: this.sim,
+            start: function () {
+                that.start();
+            },
+            stop: function () {
+                that.stop();
+            },
+        };
+    }
 
     function Town() {
         //
         // Provides road for cars to drive on, connected in various ways
         //
-        var roads = [];
+        this.roads = [];
     }
     Town.prototype.step = function () {
         // TODO: For every road, do something
+    }
+    Town.prototype.addStraightRoad = function (startx,starty,endx,endy,speed) {
+        // Basic properties
+        var road = {
+            startx: startx,
+            starty: starty,
+            endx: endx,
+            endy: endy,
+            distance: Math.sqrt(Math.pow(startx-endx,2),Math.pow(starty-endy,2)),
+            connectsFrom: [],
+            connectsTo: [],
+            speedlimit: speed,
+            active: true,
+            id: this.roads.length, // Index in this.roads
+        };
+        // Derived properties
+        road.vector = [endx-startx,endy-starty];
+        road.unit = [road.vector[0]/road.distance,road.vector[1]/road.distance];
+        // Add to array
+        this.roads.push(road);
+    }
+    Town.prototype.connectRoads = function (from, to) {
+        // Connects 2 roads such that from goes onto to
+        this.roads[from].connectsTo.push(to)
+        this.roads[to].connectsFrom.push(from);
+    }
+    Town.prototype.getRoad = function (id) {
+        // Returns information for a single road
+        return this.roads[id];
+    }
+    Town.prototype.getRandomRoad = function () {
+        return this.getRoad(
+                Math.floor(Math.random()*this.roads.length)
+                );
+    }
+    Town.prototype.getRoads = function () {
+        // Returns an array of roads representing all the
+        // information needed to draw them
+        return this.roads.map(function (road) {
+            return {
+                x1: road.startx,
+                y1: road.starty,
+                x2: road.endx,
+                y2: road.endy,
+                active: road.active,
+            };
+        });
     }
 
     function TrafficSim(town) {
@@ -62,18 +131,97 @@ window.traffic = (function () {
         // Simulates traffic in a town
         //
         this.town = town;
-        this.pos = [0,0];
+        this.cars = [];
+    }
+    TrafficSim.prototype.addCar = function (length,road,position,intel) {
+        var car = {
+            length: length,
+            roadid: road,
+            roadpos: position,
+            speed: 0,
+        };
+        // Derived properties
+        car.intel = this.buildIntelCaller(intel,car);
+
+        this.cars.push(car);
+    }
+    TrafficSim.prototype.getRandomPos = function (length) {
+        // Choose a random position free of cars
+        var road = this.town.getRandomRoad();
+        var pos = road.distance*Math.random();
+        for (car of this.cars) {
+            if (car.roadid == road.id) {
+                if (Math.abs(car.roadpos-pos)<=length) {
+                    return this.getRandomPos(length);
+                }
+            }
+        }
+        return {road: road.id, pos: pos};
+    }
+    TrafficSim.prototype.buildIntelCaller = function (intel,car) {
+        var helper = {
+            sim: this,
+            town: this.town,
+            car: car,
+        };
+        helper.getRoad = function () {
+            return this.town.getRoad(car.roadid);
+        }
+        helper.roadEndRoadDistance = function () {
+            return helper.getRoad().distance-car.roadpos;
+        }
+        helper.forward = function (dis) {
+            car.roadpos += dis;
+        }
+        helper.nextRandomRoad = function () {
+            car.roadpos = 0;
+            car.roadid = getRandomArrayItem(helper.getRoad().connectsTo);
+            console.log("car.roadid",car.roadid);
+        }
+
+        var store = {};
+        return function () {
+            intel.call(null,car,store,helper);
+        }
+    }
+    TrafficSim.prototype.stepCars = function () {
+        for (car of this.cars) {
+            car.intel();
+        }
     }
     TrafficSim.prototype.getTrafficSim = function () {
         // Returns a collection of objects that represent all the
         // information needed to draw the traffic sim
-        return this.pos;
+        return {
+            roads: this.town.getRoads(),
+            cars: this.getCars(),
+        };
+    }
+    TrafficSim.prototype.getCars = function () {
+        // Returns information needed to draw cars
+        var sim=this;
+        return this.cars.map(function (car) {
+            var road = sim.town.getRoad(car.roadid);
+            var center = [road.unit[0]*car.roadpos+road.startx,
+                          road.unit[1]*car.roadpos+road.starty];
+            var front  = [road.unit[0]*(car.roadpos+car.length/2)+road.startx,
+                          road.unit[1]*(car.roadpos+car.length/2)+road.starty];
+            var back   = [road.unit[0]*(car.roadpos-car.length/2)+road.startx,
+                          road.unit[1]*(car.roadpos-car.length/2)+road.starty];
+            return {
+                frontx: front[0],
+                fronty: front[1],
+                centerx: center[0],
+                centery: center[1],
+                backx: center[0],
+                backy: center[1],
+            }
+        });
     }
     TrafficSim.prototype.step = function () {
         // Does one traffic logic step
         this.town.step();
-        this.pos[0]++;
-        this.pos[1]++;
+        this.stepCars();
     }
     TrafficSim.prototype.getFrame = function () {
         // Returns a function to be used as the physics step
@@ -93,15 +241,39 @@ window.traffic = (function () {
     }
     TrafficSimDrawer.prototype.draw = function (time) {
         var info = this.sim.getTrafficSim();
-        this.context.clearRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
+        this.clear();
 
-        // Draw a path and print the current time to demonstrate its working
+        this.drawRoads(info.roads);
+        this.drawCars(info.cars);
+    }
+    TrafficSimDrawer.prototype.drawCars = function (cars) {
+        // Draws the cars
         this.context.beginPath();
-        this.context.moveTo(10,10);
-        this.context.lineTo(info[0],info[1]);
+        for (car of cars) {
+            this.context.moveTo(car.backx,car.backy);
+            this.context.lineTo(car.frontx,car.fronty);
+        }
+        this.context.lineWidth = 5;
+        this.context.strokeStyle = "#00F";
+        this.context.lineCap = "square";
         this.context.stroke();
         this.context.closePath();
-        this.context.fillText("time (ms): "+time.running.toString(),10,10);
+    }
+    TrafficSimDrawer.prototype.drawRoads = function (roads) {
+        // Draws the roads
+        this.context.beginPath();
+        for (road of roads) {
+            this.context.moveTo(road.x1,road.y1);
+            this.context.lineTo(road.x2,road.y2);
+        }
+        this.context.lineWidth = 3;
+        this.context.strokeStyle = "#000";
+        this.context.stroke();
+        this.context.closePath();
+    }
+    TrafficSimDrawer.prototype.clear = function () {
+        // Clears the canvas
+        this.context.clearRect(0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
     }
     TrafficSimDrawer.prototype.getFrame = function () {
         // Returns function to be used as the frame builder
@@ -220,7 +392,7 @@ window.traffic = (function () {
             stop();
         }
         builder = new TrafficBuilder(document.getElementById("traffic"));
-        builder.start();
+        return builder.getSetup();
     };
     function stop() {
         builder.stop();
@@ -238,8 +410,3 @@ window.traffic = (function () {
     };
 
 })();
-
-
-window.addEventListener("load", function () {
-    window.traffic.start();
-});
